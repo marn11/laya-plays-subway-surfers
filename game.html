@@ -1,0 +1,1121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Subway Surfers 3D Runner</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Three.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <!-- Google Fonts for Arcade Vibe -->
+    <link href="https://fonts.googleapis.com/css2?family=Fredoka+One&family=Plus+Jakarta+Sans:wght@700;800;900&display=swap" rel="stylesheet">
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            user-select: none;
+            -webkit-user-select: none;
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            background-color: #0c0a1a;
+        }
+        .arcade-font {
+            font-family: 'Fredoka One', cursive;
+        }
+        #game-canvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+        .hud-card {
+            background: rgba(15, 23, 42, 0.75);
+            backdrop-filter: blur(12px);
+            border: 2px solid rgba(255, 255, 255, 0.15);
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+        }
+        .hud-btn {
+            background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+            box-shadow: 0 6px 0 0 #b45309, 0 10px 20px rgba(0,0,0,0.4);
+            transition: all 0.1s ease;
+        }
+        .hud-btn:active {
+            transform: translateY(4px);
+            box-shadow: 0 2px 0 0 #b45309, 0 5px 10px rgba(0,0,0,0.4);
+        }
+        .text-stroke {
+            -webkit-text-stroke: 2px #0f172a;
+        }
+    </style>
+</head>
+<body class="bg-slate-950 text-white overflow-hidden select-none">
+
+    <!-- Main 3D Render Canvas -->
+    <canvas id="game-canvas"></canvas>
+
+    <!-- Overlay UI HUD Header -->
+    <div id="hud-overlay" class="absolute top-0 left-0 w-full p-4 md:p-6 flex justify-between items-start pointer-events-none z-10">
+        <!-- Left: Score & Coins -->
+        <div class="flex flex-col gap-3">
+            <div class="hud-card px-5 py-2.5 rounded-2xl flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-amber-500 to-yellow-300 flex items-center justify-center text-slate-950 text-xl font-black shadow-inner">
+                    <i class="fa-solid fa-trophy"></i>
+                </div>
+                <div>
+                    <div class="text-[10px] uppercase tracking-widest text-slate-400 font-extrabold">SCORE</div>
+                    <div id="score-text" class="text-2xl md:text-3xl font-black tracking-wide text-white arcade-font">0</div>
+                </div>
+            </div>
+
+            <div class="hud-card px-5 py-2.5 rounded-2xl flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-yellow-400 to-amber-300 flex items-center justify-center text-slate-950 text-xl font-black shadow-inner">
+                    <i class="fa-solid fa-coins animate-bounce"></i>
+                </div>
+                <div>
+                    <div class="text-[10px] uppercase tracking-widest text-slate-400 font-extrabold">COINS</div>
+                    <div id="coins-text" class="text-2xl md:text-3xl font-black tracking-wide text-yellow-400 arcade-font">0</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Center: Active Power-up Status Bars -->
+        <div id="powerup-container" class="flex flex-col gap-2 items-center"></div>
+
+        <!-- Right: Multiplier & Difficulty Speed Meter -->
+        <div class="flex flex-col items-end gap-3">
+            <div class="hud-card px-5 py-2.5 rounded-2xl flex items-center gap-3">
+                <div class="text-right">
+                    <div class="text-[10px] uppercase tracking-widest text-slate-400 font-extrabold">MULTIPLIER</div>
+                    <div id="multiplier-text" class="text-2xl md:text-3xl font-black text-emerald-400 arcade-font">1x</div>
+                </div>
+                <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-500 to-teal-300 flex items-center justify-center text-slate-950 text-xl font-black">
+                    <i class="fa-solid fa-bolt"></i>
+                </div>
+            </div>
+
+            <div id="speed-indicator" class="hud-card px-4 py-1.5 rounded-xl text-xs font-black text-amber-400 flex items-center gap-2">
+                <i class="fa-solid fa-gauge-high animate-pulse"></i> SPEED: <span id="speed-text" class="text-white">NORMAL</span>
+            </div>
+
+            <div id="shield-hint" class="hud-card px-4 py-1.5 rounded-xl text-xs font-extrabold text-cyan-300 flex items-center gap-2">
+                <i class="fa-solid fa-shield-halved"></i> Space / Double-Tap: Shield
+            </div>
+        </div>
+    </div>
+
+    <!-- Start / Game Over Overlay Menu -->
+    <div id="menu-overlay" class="absolute inset-0 bg-slate-950/85 backdrop-blur-lg flex flex-col justify-center items-center z-20 p-6">
+        <div class="hud-card p-8 rounded-3xl max-w-md w-full text-center border-2 border-slate-700/80 flex flex-col items-center shadow-2xl relative overflow-hidden">
+            <!-- Background Glow effect -->
+            <div class="absolute -top-16 -left-16 w-32 h-32 bg-amber-500/20 rounded-full blur-3xl"></div>
+            <div class="absolute -bottom-16 -right-16 w-32 h-32 bg-orange-500/20 rounded-full blur-3xl"></div>
+
+            <div class="w-24 h-24 bg-gradient-to-tr from-amber-500 via-orange-500 to-yellow-400 rounded-3xl flex items-center justify-center mb-4 shadow-xl shadow-amber-500/30 transform -rotate-3 border-2 border-yellow-200">
+                <i class="fa-solid fa-train-subway text-5xl text-slate-950"></i>
+            </div>
+
+            <h1 id="menu-title" class="text-4xl md:text-5xl font-black tracking-tight text-white mb-1 arcade-font text-stroke drop-shadow-md">SUBWAY RUNNER</h1>
+            <p id="menu-subtitle" class="text-slate-300 mb-6 text-sm font-semibold">Dodge speed trains, jump hurdles, and collect gold!</p>
+
+            <!-- Stats Box -->
+            <div id="stats-box" class="w-full bg-slate-900/90 rounded-2xl p-4 mb-6 hidden grid grid-cols-2 gap-4 border border-slate-700/80">
+                <div class="text-center">
+                    <div class="text-[11px] text-slate-400 uppercase font-black">Final Score</div>
+                    <div id="final-score" class="text-3xl font-black text-amber-400 arcade-font">0</div>
+                </div>
+                <div class="text-center">
+                    <div class="text-[11px] text-slate-400 uppercase font-black">High Score</div>
+                    <div id="high-score" class="text-3xl font-black text-emerald-400 arcade-font">0</div>
+                </div>
+            </div>
+
+            <!-- Start / Restart Button -->
+            <button id="start-btn" class="hud-btn w-full py-4 text-slate-950 font-black text-2xl rounded-2xl arcade-font tracking-wide flex items-center justify-center gap-3">
+                <i class="fa-solid fa-play"></i> START RUN
+            </button>
+            <p class="text-xs text-slate-400 mt-4 font-bold">Controls: A/D or Arrows to Lane Switch • W / Up to Jump • S / Down to Roll • Space for Shield</p>
+        </div>
+    </div>
+
+    <script>
+        // Audio Synthesizer Class
+        class SoundFX {
+            constructor() {
+                this.ctx = null;
+                this.coinPitchIndex = 0;
+            }
+            init() {
+                if (!this.ctx) {
+                    this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+                }
+            }
+            playCoin() {
+                if (!this.ctx) return;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                const scale = [523.25, 587.33, 659.25, 698.46, 783.99, 880.00, 987.77, 1046.50];
+                const freq = scale[this.coinPitchIndex % scale.length];
+                this.coinPitchIndex++;
+
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(freq * 1.5, this.ctx.currentTime + 0.08);
+
+                gain.gain.setValueAtTime(0.2, this.ctx.currentTime);
+                gain.gain.linearRampToValueAtTime(0.01, this.ctx.currentTime + 0.08);
+
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start();
+                osc.stop(this.ctx.currentTime + 0.08);
+            }
+            playJump() {
+                if (!this.ctx) return;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(180, this.ctx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(480, this.ctx.currentTime + 0.15);
+                gain.gain.setValueAtTime(0.25, this.ctx.currentTime);
+                gain.gain.linearRampToValueAtTime(0.01, this.ctx.currentTime + 0.15);
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start();
+                osc.stop(this.ctx.currentTime + 0.15);
+            }
+            playCrash() {
+                if (!this.ctx) return;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(140, this.ctx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(30, this.ctx.currentTime + 0.35);
+                gain.gain.setValueAtTime(0.5, this.ctx.currentTime);
+                gain.gain.linearRampToValueAtTime(0.01, this.ctx.currentTime + 0.35);
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start();
+                osc.stop(this.ctx.currentTime + 0.35);
+            }
+            playPowerup() {
+                if (!this.ctx) return;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(300, this.ctx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(900, this.ctx.currentTime + 0.3);
+                gain.gain.setValueAtTime(0.3, this.ctx.currentTime);
+                gain.gain.linearRampToValueAtTime(0.01, this.ctx.currentTime + 0.3);
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start();
+                osc.stop(this.ctx.currentTime + 0.3);
+            }
+            resetCoinScale() {
+                this.coinPitchIndex = 0;
+            }
+        }
+
+        const sound = new SoundFX();
+
+        const LANE_WIDTH = 3.3;
+        const LANES = [-LANE_WIDTH, 0, LANE_WIDTH];
+        const CHUNK_LENGTH = 120;
+        const RENDER_DISTANCE_CHUNKS = 6;
+        const TRAIN_HEIGHT = 3.5;
+        const TRAIN_LENGTH = 20;
+        const RAMP_LENGTH = 9;
+
+        const canvas = document.getElementById('game-canvas');
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x131a2e); // Stylized deep subway night sky
+        scene.fog = new THREE.FogExp2(0x131a2e, 0.0075);
+
+        const camera = new THREE.PerspectiveCamera(65, window.innerWidth / window.innerHeight, 0.1, 500);
+        const renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true, powerPreference: "high-performance" });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+        // Lighting
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.85);
+        scene.add(ambientLight);
+
+        const dirLight = new THREE.DirectionalLight(0xfffaed, 1.4);
+        dirLight.position.set(25, 45, 15);
+        dirLight.castShadow = true;
+        dirLight.shadow.mapSize.width = 1024;
+        dirLight.shadow.mapSize.height = 1024;
+        dirLight.shadow.camera.near = 0.5;
+        dirLight.shadow.camera.far = 160;
+        dirLight.shadow.camera.left = -22;
+        dirLight.shadow.camera.right = 22;
+        dirLight.shadow.camera.top = 35;
+        dirLight.shadow.camera.bottom = -35;
+        scene.add(dirLight);
+
+        // Stylized Subway Materials
+        const groundMat = new THREE.MeshStandardMaterial({ color: 0x222a3d, roughness: 0.8 });
+        const trackSleeperMat = new THREE.MeshStandardMaterial({ color: 0x5a3a22, roughness: 0.9 });
+        const railMat = new THREE.MeshStandardMaterial({ color: 0x94a3b8, metalness: 0.9, roughness: 0.1 });
+        const wallMat = new THREE.MeshStandardMaterial({ color: 0x1e2638, roughness: 0.9 });
+        const gantryMat = new THREE.MeshStandardMaterial({ color: 0x334155, metalness: 0.6, roughness: 0.4 });
+        
+        // Train Materials
+        const trainRedMat = new THREE.MeshStandardMaterial({ color: 0xef4444, metalness: 0.3, roughness: 0.3 });
+        const trainBlueMat = new THREE.MeshStandardMaterial({ color: 0x3b82f6, metalness: 0.3, roughness: 0.3 });
+        const trainWindowMat = new THREE.MeshStandardMaterial({ color: 0x38bdf8, emissive: 0x0284c7, emissiveIntensity: 0.5 });
+        const rampMat = new THREE.MeshStandardMaterial({ color: 0xf59e0b, roughness: 0.4 });
+        const barrierMat = new THREE.MeshStandardMaterial({ color: 0xd97706, roughness: 0.4 });
+        const headlightMat = new THREE.MeshBasicMaterial({ color: 0xfef08a });
+
+        // Collectible Materials
+        const coinMat = new THREE.MeshStandardMaterial({ color: 0xfacc15, metalness: 0.8, roughness: 0.2 });
+        const magnetMat = new THREE.MeshStandardMaterial({ color: 0xd97706, metalness: 0.6, roughness: 0.3 });
+        const jetpackMat = new THREE.MeshStandardMaterial({ color: 0xa855f7, metalness: 0.6, roughness: 0.3 });
+        const starMat = new THREE.MeshStandardMaterial({ color: 0x10b981, metalness: 0.7, roughness: 0.2 });
+
+        const playerGroup = new THREE.Group();
+        scene.add(playerGroup);
+
+        const playerBodyGroup = new THREE.Group();
+        playerGroup.add(playerBodyGroup);
+
+        // Stylized Character Meshes
+        // Torso / Hoodie
+        const torso = new THREE.Mesh(new THREE.BoxGeometry(0.85, 1.15, 0.55), new THREE.MeshStandardMaterial({ color: 0x2563eb }));
+        torso.position.y = 1.15;
+        torso.castShadow = true;
+        playerBodyGroup.add(torso);
+
+        // Head
+        const head = new THREE.Mesh(new THREE.SphereGeometry(0.36, 16, 16), new THREE.MeshStandardMaterial({ color: 0xfdcba2 }));
+        head.position.y = 2.05;
+        head.castShadow = true;
+        playerBodyGroup.add(head);
+
+        // Backwards Cap
+        const cap = new THREE.Mesh(new THREE.BoxGeometry(0.72, 0.16, 0.72), new THREE.MeshStandardMaterial({ color: 0xef4444 }));
+        cap.position.set(0, 2.3, -0.05);
+        cap.castShadow = true;
+        playerBodyGroup.add(cap);
+
+        const capVisor = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.05, 0.35), new THREE.MeshStandardMaterial({ color: 0xef4444 }));
+        capVisor.position.set(0, 2.25, -0.45);
+        playerBodyGroup.add(capVisor);
+
+        // Limbs for Procedural Running Animation
+        const leftArm = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.85, 0.22), new THREE.MeshStandardMaterial({ color: 0x2563eb }));
+        leftArm.position.set(-0.58, 1.2, 0);
+        playerBodyGroup.add(leftArm);
+
+        const rightArm = leftArm.clone();
+        rightArm.position.x = 0.58;
+        playerBodyGroup.add(rightArm);
+
+        const leftLeg = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.9, 0.28), new THREE.MeshStandardMaterial({ color: 0x1e293b }));
+        leftLeg.position.set(-0.25, 0.45, 0);
+        leftLeg.castShadow = true;
+        playerBodyGroup.add(leftLeg);
+
+        const rightLeg = leftLeg.clone();
+        rightLeg.position.x = 0.25;
+        playerBodyGroup.add(rightLeg);
+
+        // Backpack / Jetpack Attachments
+        const backpack = new THREE.Mesh(new THREE.BoxGeometry(0.65, 0.75, 0.35), jetpackMat);
+        backpack.position.set(0, 1.25, 0.4);
+        backpack.visible = false;
+        playerBodyGroup.add(backpack);
+
+        // Hoverboard Shield
+        const hoverboard = new THREE.Group();
+        const boardDeck = new THREE.Mesh(new THREE.BoxGeometry(1.3, 0.12, 2.5), new THREE.MeshStandardMaterial({ color: 0x06b6d4, metalness: 0.8, roughness: 0.2 }));
+        const boardGlow = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.05, 2.3), new THREE.MeshBasicMaterial({ color: 0x22d3ee }));
+        boardGlow.position.y = 0.08;
+        hoverboard.add(boardDeck, boardGlow);
+        hoverboard.position.y = 0.12;
+        hoverboard.visible = false;
+        playerGroup.add(hoverboard);
+
+        let isPlaying = false;
+        let score = 0;
+        let coinsCollected = 0;
+        let multiplier = 1;
+        let baseSpeed = 32;
+        let speed = 32;
+        let distanceTraveled = 0;
+        let highScore = parseInt(localStorage.getItem('subway_runner_hi') || '0', 10);
+
+        // Lane & Motion Mechanics
+        let currentLane = 1;
+        let targetX = LANES[currentLane];
+        let playerY = 0;
+        let velocityY = 0;
+        const gravity = -42;
+        const jumpForce = 15;
+        let isGrounded = true;
+        let isSliding = false;
+        let slideTimer = 0;
+        let currentSurfaceHeight = 0;
+
+        // Power-Up States
+        let hasHoverboard = false;
+        let hoverboardTimer = 0;
+        let activePowerups = { magnet: 0, jetpack: 0, double: 0 };
+
+        // Particle FX Store
+        let activeParticles = [];
+
+        // Procedural Track Generators
+        let activeChunks = [];
+        let activeObstacles = [];
+        let activeCoins = [];
+        let activePowerupItems = [];
+        let nextChunkZ = 0;
+
+        function createTrackChunk(zPos) {
+            const chunkGroup = new THREE.Group();
+            chunkGroup.position.z = zPos;
+
+            // Continuous Floor Base
+            const floor = new THREE.Mesh(new THREE.PlaneGeometry(18, CHUNK_LENGTH), groundMat);
+            floor.rotation.x = -Math.PI / 2;
+            floor.position.set(0, 0, -CHUNK_LENGTH / 2);
+            floor.receiveShadow = true;
+            chunkGroup.add(floor);
+
+            // Side Subway Walls
+            const leftWall = new THREE.Mesh(new THREE.BoxGeometry(1.2, 12, CHUNK_LENGTH), wallMat);
+            leftWall.position.set(-9.5, 6, -CHUNK_LENGTH / 2);
+            const rightWall = leftWall.clone();
+            rightWall.position.x = 9.5;
+            chunkGroup.add(leftWall, rightWall);
+
+            // Steel Rails & Sleepers
+            LANES.forEach(laneX => {
+                const rail1 = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.18, CHUNK_LENGTH), railMat);
+                rail1.position.set(laneX - 0.75, 0.09, -CHUNK_LENGTH / 2);
+                const rail2 = rail1.clone();
+                rail2.position.x = laneX + 0.75;
+                chunkGroup.add(rail1, rail2);
+
+                for (let s = 0; s < CHUNK_LENGTH; s += 3.5) {
+                    const sleeper = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.08, 0.45), trackSleeperMat);
+                    sleeper.position.set(laneX, 0.04, -s);
+                    chunkGroup.add(sleeper);
+                }
+            });
+
+            // Subway Signal Gantry Arch
+            const gantry = new THREE.Group();
+            gantry.position.set(0, 0, -CHUNK_LENGTH / 2);
+            const p1 = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, 10), gantryMat);
+            p1.position.set(-8.5, 5, 0);
+            const p2 = p1.clone();
+            p2.position.x = 8.5;
+            const topBar = new THREE.Mesh(new THREE.BoxGeometry(17.2, 0.4, 0.4), gantryMat);
+            topBar.position.set(0, 9.8, 0);
+
+            // Overhead Signal Lights
+            LANES.forEach(laneX => {
+                const signalLight = new THREE.Mesh(new THREE.SphereGeometry(0.3, 8, 8), new THREE.MeshBasicMaterial({ color: 0x22c55e }));
+                signalLight.position.set(laneX, 9.2, 0);
+                gantry.add(signalLight);
+            });
+
+            gantry.add(p1, p2, topBar);
+            chunkGroup.add(gantry);
+
+            scene.add(chunkGroup);
+            return { group: chunkGroup, zStart: zPos, zEnd: zPos - CHUNK_LENGTH };
+        }
+
+        function populateChunk(chunkZStart) {
+            if (chunkZStart > -80) return; // Safe spawn space at start
+
+            const laneOccupied = [false, false, false];
+
+            // Calculate difficulty level based on distance
+            const difficultyTier = Math.min(3, Math.floor(distanceTraveled / 250)); // Tier 0 to 3
+
+            // 1. Spawning Trains with Front Ramps
+            const trainSpawnProb = 0.45 + (difficultyTier * 0.08);
+            LANES.forEach((laneX, laneIdx) => {
+                if (Math.random() < trainSpawnProb) {
+                    laneOccupied[laneIdx] = true;
+                    const trainZ = chunkZStart - 20 - Math.random() * (CHUNK_LENGTH - TRAIN_LENGTH - 35);
+                    const trainColor = Math.random() < 0.5 ? trainRedMat : trainBlueMat;
+
+                    const trainGroup = new THREE.Group();
+                    trainGroup.position.set(laneX, 0, trainZ);
+
+                    // Train Body Mesh
+                    const trainBody = new THREE.Mesh(new THREE.BoxGeometry(2.7, TRAIN_HEIGHT, TRAIN_LENGTH), trainColor);
+                    trainBody.position.y = TRAIN_HEIGHT / 2;
+                    trainBody.castShadow = true;
+                    trainBody.receiveShadow = true;
+                    trainGroup.add(trainBody);
+
+                    // Windows
+                    const windows = new THREE.Mesh(new THREE.BoxGeometry(2.72, 0.85, TRAIN_LENGTH - 3), trainWindowMat);
+                    windows.position.y = TRAIN_HEIGHT - 0.7;
+                    trainGroup.add(windows);
+
+                    // Front Headlights
+                    const light1 = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, 0.1), headlightMat);
+                    light1.rotation.x = Math.PI / 2;
+                    light1.position.set(-0.8, 1.0, TRAIN_LENGTH / 2 + 0.05);
+                    const light2 = light1.clone();
+                    light2.position.x = 0.8;
+                    trainGroup.add(light1, light2);
+
+                    // Front Slope Ramp
+                    const hasRamp = Math.random() < 0.6;
+                    if (hasRamp) {
+                        const rampGeo = new THREE.BufferGeometry();
+                        const rampW = 2.7, rampH = TRAIN_HEIGHT, rampL = RAMP_LENGTH;
+                        const vertices = new Float32Array([
+                            -rampW/2, 0, rampL,   rampW/2, 0, rampL,   rampW/2, rampH, 0,
+                            -rampW/2, 0, rampL,   rampW/2, rampH, 0,  -rampW/2, rampH, 0,
+                            -rampW/2, 0, 0,       -rampW/2, rampH, 0,   rampW/2, rampH, 0,
+                            -rampW/2, 0, 0,        rampW/2, rampH, 0,    rampW/2, 0, 0,
+                            -rampW/2, 0, 0,       -rampW/2, 0, rampL,  -rampW/2, rampH, 0,
+                             rampW/2, 0, 0,        rampW/2, rampH, 0,   rampW/2, 0, rampL
+                        ]);
+                        rampGeo.setAttribute('position', new THREE.BufferAttribute(vertices, 3));
+                        rampGeo.computeVertexNormals();
+
+                        const rampMesh = new THREE.Mesh(rampGeo, rampMat);
+                        rampMesh.position.set(0, 0, TRAIN_LENGTH / 2);
+                        rampMesh.castShadow = true;
+                        rampMesh.receiveShadow = true;
+                        trainGroup.add(rampMesh);
+                    }
+
+                    scene.add(trainGroup);
+
+                    activeObstacles.push({
+                        type: 'train',
+                        group: trainGroup,
+                        lane: laneIdx,
+                        x: laneX,
+                        zStart: trainZ + TRAIN_LENGTH / 2,
+                        zEnd: trainZ - TRAIN_LENGTH / 2,
+                        height: TRAIN_HEIGHT,
+                        hasRamp: hasRamp,
+                        rampZStart: trainZ + TRAIN_LENGTH / 2 + (hasRamp ? RAMP_LENGTH : 0),
+                        rampZEnd: trainZ + TRAIN_LENGTH / 2
+                    });
+
+                    // Coins along Train Roof
+                    for (let c = -TRAIN_LENGTH / 3; c <= TRAIN_LENGTH / 3; c += 2.8) {
+                        spawnCoin(laneX, TRAIN_HEIGHT + 0.85, trainZ + c);
+                    }
+                }
+            });
+
+            // 2. High / Low Hurdles
+            LANES.forEach((laneX, laneIdx) => {
+                if (!laneOccupied[laneIdx] && Math.random() < 0.55) {
+                    laneOccupied[laneIdx] = true;
+                    const obstacleZ = chunkZStart - 15 - Math.random() * (CHUNK_LENGTH - 30);
+                    const isHigh = Math.random() < 0.45;
+
+                    const barrierGroup = new THREE.Group();
+                    barrierGroup.position.set(laneX, 0, obstacleZ);
+
+                    if (isHigh) {
+                        // High barrier: Requires slide roll under
+                        const bar = new THREE.Mesh(new THREE.BoxGeometry(2.9, 0.8, 0.4), barrierMat);
+                        bar.position.y = 2.3;
+                        const p1 = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 2.6), barrierMat);
+                        p1.position.set(-1.25, 1.3, 0);
+                        const p2 = p1.clone();
+                        p2.position.set(1.25, 1.3, 0);
+                        barrierGroup.add(bar, p1, p2);
+
+                        // Flat ground coins under high hurdle for rolling
+                        for (let c = -2; c <= 2; c++) {
+                            spawnCoin(laneX, 0.85, obstacleZ + (c * 2.0));
+                        }
+                    } else {
+                        // Low barrier: Requires jump over
+                        const bar = new THREE.Mesh(new THREE.BoxGeometry(2.9, 1.2, 0.4), barrierMat);
+                        bar.position.y = 0.6;
+                        barrierGroup.add(bar);
+
+                        // Parabolic Coin Arc OVER low barrier
+                        const coinCount = 5;
+                        for (let i = 0; i < coinCount; i++) {
+                            const offsetZ = (i - (coinCount - 1) / 2) * 2.0;
+                            const coinZ = obstacleZ - offsetZ;
+                            const coinY = 0.85 + Math.sin((i / (coinCount - 1)) * Math.PI) * 2.4;
+                            spawnCoin(laneX, coinY, coinZ);
+                        }
+                    }
+
+                    barrierGroup.traverse(c => { if(c.isMesh) c.castShadow = true; });
+                    scene.add(barrierGroup);
+
+                    activeObstacles.push({
+                        type: 'barrier',
+                        isHigh: isHigh,
+                        group: barrierGroup,
+                        lane: laneIdx,
+                        x: laneX,
+                        z: obstacleZ,
+                        height: isHigh ? 2.3 : 1.2
+                    });
+                }
+            });
+
+            // 3. Flat Ground Coin Lines (Straight runs without obstacles)
+            LANES.forEach((laneX, laneIdx) => {
+                if (!laneOccupied[laneIdx] && Math.random() < 0.65) {
+                    const startZ = chunkZStart - Math.random() * (CHUNK_LENGTH - 35);
+                    const coinCount = 5 + Math.floor(Math.random() * 6);
+                    for (let i = 0; i < coinCount; i++) {
+                        spawnCoin(laneX, 0.85, startZ - (i * 2.2));
+                    }
+                }
+            });
+
+            // 4. Powerups Spawning
+            if (Math.random() < 0.35) {
+                const pLane = Math.floor(Math.random() * 3);
+                const pZ = chunkZStart - Math.random() * CHUNK_LENGTH;
+                const types = ['magnet', 'jetpack', 'double'];
+                spawnPowerup(LANES[pLane], 1.2, pZ, types[Math.floor(Math.random() * types.length)]);
+            }
+
+            // 5. Sky Coins for Jetpack Flight
+            if (activePowerups.jetpack > 0) {
+                const skyLane = Math.floor(Math.random() * 3);
+                for (let s = 0; s < CHUNK_LENGTH; s += 2.2) {
+                    spawnCoin(LANES[skyLane], 8.5, chunkZStart - s);
+                    if (Math.random() < 0.35) {
+                        const nextLane = (skyLane + 1) % 3;
+                        spawnCoin(LANES[nextLane], 8.5, chunkZStart - s);
+                    }
+                }
+            }
+        }
+
+        function spawnCoin(x, y, z) {
+            const coinGroup = new THREE.Group();
+            coinGroup.position.set(x, y, z);
+
+            const coinMesh = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.42, 0.12, 16), coinMat);
+            coinMesh.rotation.x = Math.PI / 2;
+            coinMesh.castShadow = true;
+
+            const innerStar = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.25, 0.15), starMat);
+            coinGroup.add(coinMesh, innerStar);
+
+            scene.add(coinGroup);
+            activeCoins.push(coinGroup);
+        }
+
+        function spawnPowerup(x, y, z, type) {
+            let mesh;
+            if (type === 'magnet') {
+                mesh = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.8, 0.8), magnetMat);
+            } else if (type === 'jetpack') {
+                mesh = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 0.9, 12), jetpackMat);
+            } else {
+                mesh = new THREE.Mesh(new THREE.OctahedronGeometry(0.5), starMat);
+            }
+            mesh.position.set(x, y, z);
+            scene.add(mesh);
+
+            activePowerupItems.push({ mesh: mesh, type: type, x: x, z: z });
+        }
+
+        function triggerParticleBurst(pos, colorHex, count = 8) {
+            for (let i = 0; i < count; i++) {
+                const p = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.18, 0.18), new THREE.MeshBasicMaterial({ color: colorHex }));
+                p.position.copy(pos);
+                p.userData = {
+                    vx: (Math.random() - 0.5) * 6,
+                    vy: Math.random() * 6 + 2,
+                    vz: (Math.random() - 0.5) * 6,
+                    life: 0.4
+                };
+                scene.add(p);
+                activeParticles.push(p);
+            }
+        }
+
+        function updateChunks() {
+            while (nextChunkZ > playerGroup.position.z - (RENDER_DISTANCE_CHUNKS * CHUNK_LENGTH)) {
+                const chunk = createTrackChunk(nextChunkZ);
+                activeChunks.push(chunk);
+                populateChunk(nextChunkZ);
+                nextChunkZ -= CHUNK_LENGTH;
+            }
+
+            for (let i = activeChunks.length - 1; i >= 0; i--) {
+                const chunk = activeChunks[i];
+                if (chunk.zEnd > playerGroup.position.z + 40) {
+                    scene.remove(chunk.group);
+                    activeChunks.splice(i, 1);
+                }
+            }
+        }
+
+        // Input Controls
+        window.addEventListener('keydown', (e) => {
+            if (!isPlaying) return;
+            if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') moveLane(-1);
+            if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') moveLane(1);
+            if (e.key === 'ArrowUp' || e.key === 'w' || e.key === 'W') jump();
+            if (e.key === 'ArrowDown' || e.key === 's' || e.key === 'S') slide();
+            if (e.code === 'Space') activateHoverboard();
+        });
+
+        let touchStartX = 0, touchStartY = 0, lastTapTime = 0;
+        window.addEventListener('touchstart', (e) => {
+            touchStartX = e.touches[0].clientX;
+            touchStartY = e.touches[0].clientY;
+
+            const currentTime = new Date().getTime();
+            if (currentTime - lastTapTime < 280 && currentTime - lastTapTime > 0) {
+                activateHoverboard();
+            }
+            lastTapTime = currentTime;
+        }, { passive: true });
+
+        window.addEventListener('touchend', (e) => {
+            if (!isPlaying) return;
+            const diffX = e.changedTouches[0].clientX - touchStartX;
+            const diffY = e.changedTouches[0].clientY - touchStartY;
+
+            if (Math.abs(diffX) > Math.abs(diffY)) {
+                if (diffX > 30) moveLane(1);
+                else if (diffX < -30) moveLane(-1);
+            } else {
+                if (diffY < -30) jump();
+                else if (diffY > 30) slide();
+            }
+        }, { passive: true });
+
+        function moveLane(dir) {
+            currentLane = Math.max(0, Math.min(2, currentLane + dir));
+            targetX = LANES[currentLane];
+        }
+
+        function jump() {
+            if (isGrounded || activePowerups.jetpack > 0) {
+                velocityY = jumpForce;
+                isGrounded = false;
+                sound.playJump();
+                triggerParticleBurst(playerGroup.position, 0x94a3b8, 6);
+            }
+        }
+
+        function slide() {
+            if (!isSliding) {
+                isSliding = true;
+                slideTimer = 0.65;
+                playerBodyGroup.scale.set(1, 0.38, 1);
+                if (!isGrounded) velocityY = -24;
+            }
+        }
+
+        function activateHoverboard() {
+            if (!hasHoverboard) {
+                hasHoverboard = true;
+                hoverboardTimer = 10;
+                hoverboard.visible = true;
+                sound.playPowerup();
+            }
+        }
+
+        function updatePlayerPhysics(delta) {
+            // Difficulty Speed Scaling - Infinitely increasing speed without upper cap!
+            speed = baseSpeed + Math.pow(distanceTraveled / 50, 0.82);
+
+            // Forward Motion
+            playerGroup.position.z -= speed * delta;
+            distanceTraveled = Math.abs(playerGroup.position.z);
+            score = Math.floor(distanceTraveled * (activePowerups.double > 0 ? 2 : 1));
+
+            // Smooth Lateral Lane Movement with Roll/Tilt
+            const laneDiff = targetX - playerGroup.position.x;
+            playerGroup.position.x += laneDiff * 16 * delta;
+            playerGroup.rotation.z = -laneDiff * 0.12; // Dynamic bank tilt on lane switch
+
+            // Limb Swing Running Animation
+            if (isGrounded && activePowerups.jetpack <= 0) {
+                const runCycle = Math.sin(distanceTraveled * 0.4) * 0.8;
+                leftLeg.rotation.x = runCycle;
+                rightLeg.rotation.x = -runCycle;
+                leftArm.rotation.x = -runCycle;
+                rightArm.rotation.x = runCycle;
+            }
+
+            // Surface Height Detection (Ramps & Train Roofs)
+            currentSurfaceHeight = 0;
+            const pX = playerGroup.position.x;
+            const pZ = playerGroup.position.z;
+            const pY = playerGroup.position.y;
+
+            activeObstacles.forEach(obs => {
+                if (obs.type === 'train') {
+                    const inLane = Math.abs(pX - obs.x) < 1.35;
+
+                    // Smooth Ramp Climbing
+                    if (obs.hasRamp && inLane && pZ <= obs.rampZStart && pZ >= obs.rampZEnd) {
+                        const rampLength = obs.rampZStart - obs.rampZEnd;
+                        const distIntoRamp = obs.rampZStart - pZ;
+                        const rampRatio = Math.min(1.0, Math.max(0.0, distIntoRamp / rampLength));
+                        const rampHeightAtZ = rampRatio * TRAIN_HEIGHT;
+
+                        if (pY >= rampHeightAtZ - 1.2) {
+                            currentSurfaceHeight = Math.max(currentSurfaceHeight, rampHeightAtZ);
+                        }
+                    }
+
+                    // Train Roof Platform
+                    if (inLane && pZ <= obs.zStart && pZ >= obs.zEnd) {
+                        if (pY >= TRAIN_HEIGHT - 0.85) {
+                            currentSurfaceHeight = Math.max(currentSurfaceHeight, TRAIN_HEIGHT);
+                        }
+                    }
+                }
+            });
+
+            // Jetpack Sky Run Height
+            if (activePowerups.jetpack > 0) {
+                currentSurfaceHeight = 8.5;
+                backpack.visible = true;
+                // Jetpack Flame Particle
+                triggerParticleBurst(playerGroup.position.clone().add(new THREE.Vector3(0, 0.8, 0.4)), 0xf97316, 2);
+            } else {
+                backpack.visible = false;
+            }
+
+            // Gravity & Vertical Physics
+            if (isGrounded && playerY < currentSurfaceHeight) {
+                playerY = THREE.MathUtils.lerp(playerY, currentSurfaceHeight, 26 * delta);
+                velocityY = 0;
+            } else {
+                playerY += velocityY * delta;
+                velocityY += gravity * delta;
+
+                if (playerY <= currentSurfaceHeight) {
+                    playerY = currentSurfaceHeight;
+                    velocityY = 0;
+                    if (!isGrounded) sound.resetCoinScale();
+                    isGrounded = true;
+                } else {
+                    isGrounded = false;
+                }
+            }
+
+            playerGroup.position.y = playerY;
+
+            // Slide Timer
+            if (isSliding) {
+                slideTimer -= delta;
+                if (slideTimer <= 0) {
+                    isSliding = false;
+                    playerBodyGroup.scale.set(1, 1, 1);
+                }
+            }
+
+            // Shield / Hoverboard Timer
+            if (hasHoverboard) {
+                hoverboardTimer -= delta;
+                hoverboard.rotation.y += delta * 5;
+                if (hoverboardTimer <= 0) {
+                    hasHoverboard = false;
+                    hoverboard.visible = false;
+                }
+            }
+
+            // Active Powerup Timers
+            Object.keys(activePowerups).forEach(key => {
+                if (activePowerups[key] > 0) activePowerups[key] -= delta;
+            });
+
+            // Update Particle Life
+            for (let i = activeParticles.length - 1; i >= 0; i--) {
+                const p = activeParticles[i];
+                p.position.x += p.userData.vx * delta;
+                p.position.y += p.userData.vy * delta;
+                p.position.z += p.userData.vz * delta;
+                p.userData.life -= delta;
+                if (p.userData.life <= 0) {
+                    scene.remove(p);
+                    activeParticles.splice(i, 1);
+                }
+            }
+        }
+
+        function checkCollisions() {
+            const pX = playerGroup.position.x;
+            const pY = playerGroup.position.y;
+            const pZ = playerGroup.position.z;
+
+            // Obstacle Crashes
+            for (let obs of activeObstacles) {
+                if (obs.type === 'train') {
+                    const inLane = Math.abs(pX - obs.x) < 1.25;
+
+                    // Ramp Zone Safety
+                    if (obs.hasRamp && inLane && pZ <= obs.rampZStart && pZ >= obs.rampZEnd) {
+                        continue;
+                    }
+
+                    // Front/Side Crash
+                    if (inLane && pZ <= obs.zStart && pZ >= obs.zEnd) {
+                        if (pY < TRAIN_HEIGHT - 0.45) {
+                            handleCrash();
+                            return;
+                        }
+                    }
+                } else if (obs.type === 'barrier') {
+                    if (Math.abs(pX - obs.x) < 1.2 && Math.abs(pZ - obs.z) < 0.8) {
+                        if (obs.isHigh) {
+                            if (!isSliding) { handleCrash(); return; }
+                        } else {
+                            if (pY < obs.height) { handleCrash(); return; }
+                        }
+                    }
+                }
+            }
+
+            // Coin Magnet & Pickup
+            for (let i = activeCoins.length - 1; i >= 0; i--) {
+                const coin = activeCoins[i];
+                const dist = playerGroup.position.distanceTo(coin.position);
+
+                if (activePowerups.magnet > 0 && dist < 14) {
+                    coin.position.lerp(playerGroup.position, 0.22);
+                }
+
+                if (dist < 1.6) {
+                    triggerParticleBurst(coin.position, 0xfacc15, 6);
+                    scene.remove(coin);
+                    activeCoins.splice(i, 1);
+                    coinsCollected++;
+                    sound.playCoin();
+                }
+            }
+
+            // Powerup Collectibles Pickup
+            for (let i = activePowerupItems.length - 1; i >= 0; i--) {
+                const item = activePowerupItems[i];
+                if (playerGroup.position.distanceTo(item.mesh.position) < 1.8) {
+                    triggerParticleBurst(item.mesh.position, 0x38bdf8, 12);
+                    scene.remove(item.mesh);
+                    activePowerups[item.type] = 10;
+                    activePowerupItems.splice(i, 1);
+                    sound.playPowerup();
+
+                    // Jetpack Sky Coins Stream Generation
+                    if (item.type === 'jetpack') {
+                        const startZ = playerGroup.position.z - 10;
+                        for (let cz = 0; cz < 320; cz += 2.4) {
+                            const laneIdx = Math.floor((cz / 45) % 3);
+                            spawnCoin(LANES[laneIdx], 8.5, startZ - cz);
+                        }
+                    }
+                }
+            }
+        }
+
+        function handleCrash() {
+            if (hasHoverboard) {
+                hasHoverboard = false;
+                hoverboard.visible = false;
+                sound.playCrash();
+                triggerParticleBurst(playerGroup.position, 0x06b6d4, 16);
+                playerGroup.position.z -= 5; // Safety push back
+                return;
+            }
+
+            sound.playCrash();
+            isPlaying = false;
+            triggerParticleBurst(playerGroup.position, 0xef4444, 20);
+
+            if (score > highScore) {
+                highScore = score;
+                localStorage.setItem('subway_runner_hi', highScore.toString());
+            }
+
+            document.getElementById('final-score').innerText = score;
+            document.getElementById('high-score').innerText = highScore;
+            document.getElementById('stats-box').classList.remove('hidden');
+            document.getElementById('menu-title').innerText = "BUSTED!";
+            document.getElementById('menu-subtitle').innerText = "You crashed into an obstacle!";
+            document.getElementById('start-btn').innerHTML = '<i class="fa-solid fa-rotate-right"></i> RUN AGAIN';
+            document.getElementById('menu-overlay').classList.remove('hidden');
+        }
+
+        function updateHUD() {
+            document.getElementById('score-text').innerText = score;
+            document.getElementById('coins-text').innerText = coinsCollected;
+            document.getElementById('multiplier-text').innerText = (activePowerups.double > 0 ? 2 : 1) + 'x';
+
+            // Speed Indicator Status
+            const speedElem = document.getElementById('speed-text');
+            if (speed < 40) speedElem.innerText = "NORMAL";
+            else if (speed < 55) speedElem.innerText = "FAST!";
+            else if (speed < 75) speedElem.innerText = "INSANE!!";
+            else speedElem.innerText = "HYPERSPACE!!!";
+
+            const container = document.getElementById('powerup-container');
+            container.innerHTML = '';
+
+            Object.keys(activePowerups).forEach(type => {
+                if (activePowerups[type] > 0) {
+                    const badge = document.createElement('div');
+                    badge.className = 'hud-card px-3.5 py-1.5 rounded-xl text-xs font-black text-amber-300 flex items-center gap-2';
+                    badge.innerHTML = `<i class="fa-solid fa-bolt text-amber-400"></i> ${type.toUpperCase()}: ${Math.ceil(activePowerups[type])}s`;
+                    container.appendChild(badge);
+                }
+            });
+        }
+
+        let clock = new THREE.Clock();
+
+        function animate() {
+            requestAnimationFrame(animate);
+
+            const delta = Math.min(clock.getDelta(), 0.1);
+
+            if (isPlaying) {
+                updatePlayerPhysics(delta);
+                updateChunks();
+                checkCollisions();
+                updateHUD();
+
+                // Rotate Collectibles
+                activeCoins.forEach(c => c.rotation.y += delta * 4);
+                activePowerupItems.forEach(p => p.mesh.rotation.y += delta * 3);
+
+                // Dynamic FOV stretch based on speed
+                camera.fov = THREE.MathUtils.lerp(camera.fov, 65 + (speed - 32) * 0.3, 5 * delta);
+                camera.updateProjectionMatrix();
+
+                // Dynamic Camera Smooth Follow
+                camera.position.x = THREE.MathUtils.lerp(camera.position.x, playerGroup.position.x * 0.55, 12 * delta);
+                camera.position.y = THREE.MathUtils.lerp(camera.position.y, playerGroup.position.y + 4.6, 12 * delta);
+                camera.position.z = playerGroup.position.z + 8.8;
+                camera.lookAt(playerGroup.position.x * 0.25, playerGroup.position.y + 1.8, playerGroup.position.z - 12);
+            }
+
+            renderer.render(scene, camera);
+        }
+
+        function resetGame() {
+            activeChunks.forEach(c => scene.remove(c.group));
+            activeObstacles.forEach(o => scene.remove(o.group));
+            activeCoins.forEach(c => scene.remove(c));
+            activePowerupItems.forEach(p => scene.remove(p.mesh));
+            activeParticles.forEach(p => scene.remove(p));
+
+            activeChunks = [];
+            activeObstacles = [];
+            activeCoins = [];
+            activePowerupItems = [];
+            activeParticles = [];
+
+            score = 0;
+            coinsCollected = 0;
+            baseSpeed = 32;
+            speed = 32;
+            distanceTraveled = 0;
+            currentLane = 1;
+            targetX = LANES[1];
+            playerY = 0;
+            velocityY = 0;
+            isGrounded = true;
+            isSliding = false;
+            hasHoverboard = false;
+            hoverboard.visible = false;
+            backpack.visible = false;
+            activePowerups = { magnet: 0, jetpack: 0, double: 0 };
+            nextChunkZ = 0;
+
+            playerGroup.position.set(0, 0, 0);
+
+            for (let i = 0; i < RENDER_DISTANCE_CHUNKS; i++) {
+                const chunk = createTrackChunk(nextChunkZ);
+                activeChunks.push(chunk);
+                populateChunk(nextChunkZ);
+                nextChunkZ -= CHUNK_LENGTH;
+            }
+        }
+
+        document.getElementById('start-btn').addEventListener('click', () => {
+            sound.init();
+            resetGame();
+            document.getElementById('menu-overlay').classList.add('hidden');
+            isPlaying = true;
+        });
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        window.onload = function() {
+            animate();
+        };
+
+        // ---- Bridge for programmatic control (added for laya-plays-subway-surfers) ----
+        // Exposes game state and accepts actions without simulating keyboard/touch events.
+        // Lives in the same scope as the game's own variables/functions above, so it can
+        // read/call them directly.
+        window.__getState = function () {
+            const pZ = playerGroup.position.z;
+            const obstaclesAhead = activeObstacles
+                .map(function (obs) {
+                    const z = obs.type === 'train' ? obs.zStart : obs.z;
+                    return {
+                        type: obs.type,
+                        lane: obs.lane,
+                        isHigh: !!obs.isHigh,
+                        distance: pZ - z // positive = ahead (not yet reached), 0 = at player, negative = passed
+                    };
+                })
+                .filter(function (o) { return o.distance > -5 && o.distance < 60; })
+                .sort(function (a, b) { return a.distance - b.distance; })
+                .slice(0, 5);
+
+            return {
+                isPlaying: isPlaying,
+                currentLane: currentLane,
+                isGrounded: isGrounded,
+                isSliding: isSliding,
+                speed: speed,
+                score: score,
+                distanceTraveled: distanceTraveled,
+                obstaclesAhead: obstaclesAhead
+            };
+        };
+
+        window.__action = function (name) {
+            if (name === 'left') moveLane(-1);
+            else if (name === 'right') moveLane(1);
+            else if (name === 'jump') jump();
+            else if (name === 'duck') slide();
+            // 'none' -> no-op
+        };
+
+        window.__restart = function () {
+            document.getElementById('start-btn').click();
+        };
+    </script>
+</body>
+</html>
