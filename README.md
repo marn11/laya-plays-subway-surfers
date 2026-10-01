@@ -43,17 +43,18 @@ Each episode prints `ticks`, `score`, and `distance`. `--record <path>` appends 
 | left | 261 | 0.5% |
 | right | 248 | 0.5% |
 
-Makes sense (most ticks have no obstacle within reaction distance), but training directly on this as-is would teach Laya to mostly just say "none" and get ~95% tick-level accuracy while being useless at the only ticks that matter. Needs addressing before fine-tuning — likely downsampling "none" or weighting the loss — not done yet, flagged here so it's not forgotten.
+Makes sense (most ticks have no obstacle within reaction distance), but training directly on this as-is would teach Laya to mostly just say "none" and get ~95% tick-level accuracy while being useless at the only ticks that matter.
+
+**Fixed via `balance_dataset.js`** (`node balance_dataset.js data/oracle_dataset.jsonl data/oracle_dataset_balanced.jsonl`): randomly downsamples "none" rows down to the same total as all non-"none" rows combined, leaving jump/duck/left/right untouched (no duplication of the smallest classes, to avoid overfitting on a handful of repeated frames). Result, `data/oracle_dataset_balanced.jsonl` (committed): **5,294 rows** — 2,647 "none" (50%), 1,211 jump, 927 duck, 261 left, 248 right. This specific 50/50 ratio is one defensible choice, not the only correct one — revisit if the fine-tuned result still leans "none"-biased.
 
 ## Status
 
-Bridge, oracle, and a real 51k-tick dataset all verified working end-to-end, via committed runnable scripts (`play_oracle.js`, `oracle.js`) rather than one-off commands — see "Running it yourself" above. Two real performance bugs were found and fixed while scaling this up (see the commit history on `play_oracle.js`/`game.html`): per-tick Node↔browser round trips were the real bottleneck (fixed by running the whole episode loop in-browser), and headless Chromium was still fully rendering every frame for no one to see (fixed with a `window.__fastMode` flag) — together, a 3.6x speedup.
+Bridge, oracle, a real 51k-tick dataset, and a balanced training-ready version all verified working end-to-end, via committed runnable scripts (`play_oracle.js`, `oracle.js`, `balance_dataset.js`) rather than one-off commands — see "Running it yourself" above. Two real performance bugs were found and fixed while scaling data collection up (see the commit history on `play_oracle.js`/`game.html`): per-tick Node↔browser round trips were the real bottleneck (fixed by running the whole episode loop in-browser), and headless Chromium was still fully rendering every frame for no one to see (fixed with a `window.__fastMode` flag) — together, a 3.6x speedup.
 
 ## Open questions / next steps
 
-- Fix the action-class imbalance above before training on this data (downsample "none", or weight the fine-tuning loss)
+- Design the actual Laya prompt (next up): a `choice` question over `{left, right, jump, duck, none}` given a text rendering of `obstaclesAhead`
 - Make the oracle coin-seeking, not just obstacle-avoiding: `__getState()` currently only reports `obstaclesAhead` — the game's own `activeCoins` array isn't exposed at all yet. Would need (a) a `coinsAhead` field added to `__getState()` the same way `obstaclesAhead` works, and (b) oracle.js logic to prefer an adjacent lane with coins when it's not already forced to dodge something. Not done yet — just scoped.
-- Design the actual Laya prompt: a `choice` question over `{left, right, jump, duck, none}` given a text rendering of `obstaclesAhead`
 - Fine-tune on that data using the same Kaggle T4x2 pipeline built in `laya-model-router/finetune/`
 - Swap the oracle for the fine-tuned Laya checkpoint in `play_oracle.js` (or a new `play_laya.js`) and watch it play live
 - Decide how to judge "did it work" — survival time / score vs. the oracle and vs. zero-shot Laya, on held-out runs
