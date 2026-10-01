@@ -98,8 +98,16 @@ uv run python play_laya.py --checkpoint finetune/checkpoints/v1 --episodes 10 --
 
 ~3.6x higher score, ~2.7x farther survived. This is the number that actually matters — the 99.8% classifier accuracy above doesn't by itself prove the fine-tuned model plays *better*, only that it matches the oracle's labels more often; this result confirms that translates into materially better real gameplay, not just higher held-out accuracy on recorded frames.
 
+### Why isn't it "unbeatable"? (it was never going to be)
+
+Score ~1,500 is good, not perfect, and that's expected for three separable reasons -- the first two are inherent, the third was a real, testable hypothesis that turned out to be wrong:
+
+1. **The game has no difficulty ceiling.** `speed = 32 + (distanceTraveled/50)^0.82` grows forever, by design -- this is an endless runner, the score is "how long before the game outpaces you," not a fixed challenge with a ceiling to clear. Nothing survives indefinitely, human or AI.
+2. **Laya's skill ceiling is the oracle's skill ceiling.** `oracle.js`'s train-dodge rule (`currentLane === 0 ? "right" : "left"`) never checks whether the *destination* lane is actually safe -- no lookahead, no planning, pure reflex. Laya learned to imitate exactly that. It still beat the oracle's own average (oracle ~733-1025 across earlier runs vs. Laya's 1562.6) by executing more consistently, but it can't exceed what it was taught to copy.
+3. **Tested and ruled out: finer time-steps do NOT help, they hurt a lot.** Hypothesized that `play_laya.py`'s fixed `--tick-dt 0.1` might be giving too few reaction-window ticks at high speed (computed: ~2.6 ticks of lead time by distance 2454, where the best run died) and that a smaller step might raise the ceiling. Tested `--tick-dt 0.03` (5 episodes): **avg score dropped to 254.2** -- roughly 6x worse, not better. Finer stepping means more total decisions needed to cover the same distance, and Laya isn't perfect (99.8%, not 100%) -- more decision points per unit of distance is more chances for a small per-decision error rate to compound, not more safety margin. There's likely also a distribution-shift effect: training data's obstacle-distance values came from the oracle's own coarser real-time tick granularity, so evaluating at much finer granularity shows the model distance values it's less calibrated for. `dt=0.1` (close to the training data's implicit granularity) stays the default.
+
 ## Open questions / next steps
 
+- Fix the oracle's actual skill ceiling, not just its data volume: teach it to check the destination lane before dodging into it (currently blind — see "Why isn't it unbeatable" above). This is a real behavior upgrade, likely a bigger lever on Laya's ceiling than more data of the same quality would be.
 - Make the oracle (and Laya) coin-seeking, not just obstacle-avoiding: `__getState()` currently only reports `obstaclesAhead` — the game's own `activeCoins` array isn't exposed at all yet. Would need (a) a `coinsAhead` field added to `__getState()` the same way `obstaclesAhead` works, and (b) oracle.js logic to prefer an adjacent lane with coins when it's not already forced to dodge something. Not done yet — just scoped.
-- Tune `TICK_DT` in `play_laya.py` (currently 0.1s) — untested whether a smaller step size changes results meaningfully
-- Try a bigger training set (the whole project used ~4k fine-tuning examples from 18 episodes) now that the pipeline is proven end to end
+- Try a bigger training set (the whole project used ~4k fine-tuning examples from 18 episodes) now that the pipeline is proven end to end -- won't fix the destination-lane blind spot above, but may still help consistency

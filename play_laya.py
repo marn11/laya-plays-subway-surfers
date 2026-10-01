@@ -33,7 +33,11 @@ sys.path.insert(0, str(Path(__file__).parent / "src"))
 from laya_plays_subway_surfers.policy import QUESTIONS, render_state  # noqa: E402
 
 ROOT = Path(__file__).parent
-TICK_DT = 0.1  # seconds of simulated game time per decision -- see module docstring
+DEFAULT_TICK_DT = 0.1  # seconds of simulated game time per decision -- see module docstring.
+# As speed grows (uncapped, see game.html), a fixed dt gives fewer and fewer
+# decision opportunities within the oracle's 15-unit reaction window -- down
+# to ~2.6 ticks of lead time by distance 2454 in one real run. Pass
+# --tick-dt to test whether a finer step size raises the score ceiling.
 
 
 def serve_dir(root: Path, port: int) -> http.server.ThreadingHTTPServer:
@@ -43,7 +47,7 @@ def serve_dir(root: Path, port: int) -> http.server.ThreadingHTTPServer:
     return server
 
 
-def play_one_episode(page, agent) -> dict:
+def play_one_episode(page, agent, tick_dt: float) -> dict:
     page.evaluate("() => window.__restart()")
     state = page.evaluate("() => window.__getState()")
     ticks = 0
@@ -53,7 +57,7 @@ def play_one_episode(page, agent) -> dict:
         action = answer["choice"]
         if action != "none":
             page.evaluate("(a) => window.__action(a)", action)
-        state = page.evaluate("(dt) => window.__tickOnce(dt)", TICK_DT)
+        state = page.evaluate("(dt) => window.__tickOnce(dt)", tick_dt)
         ticks += 1
 
     return {"ticks": ticks, "score": state["score"], "distanceTraveled": state["distanceTraveled"]}
@@ -67,6 +71,7 @@ def main() -> None:
     parser.add_argument("--episodes", type=int, default=1)
     parser.add_argument("--headless", action="store_true")
     parser.add_argument("--port", type=int, default=8732)
+    parser.add_argument("--tick-dt", type=float, default=DEFAULT_TICK_DT)
     args = parser.parse_args()
 
     if args.zero_shot:
@@ -86,7 +91,7 @@ def main() -> None:
 
             results = []
             for ep in range(1, args.episodes + 1):
-                result = play_one_episode(page, agent)
+                result = play_one_episode(page, agent, args.tick_dt)
                 results.append(result)
                 print(f"[{label}] episode {ep}/{args.episodes}: {result['ticks']} ticks, score {result['score']}, distance {result['distanceTraveled']:.1f}")
 
