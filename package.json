@@ -1,0 +1,12 @@
+{
+  "name": "laya-plays-subway-surfers",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "play:oracle": "node play_oracle.js"
+  },
+  "dependencies": {
+    "playwright": "^1.48.0"
+  }
+}

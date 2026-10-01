@@ -16,18 +16,33 @@ Added at the bottom of that same `<script>` block, so it has direct access to th
 - `window.__action(name)` — `"left" | "right" | "jump" | "duck" | "none"`.
 - `window.__restart()` — clicks the game's own start/retry button.
 
+## The oracle
+
+`oracle.js` is **not a model** — it's a small, fixed set of reflex rules (if an obstacle is in my lane within 15 units: dodge trains sideways, duck high barriers, jump low ones). It's the *teacher*: good enough to survive a while, cheap to run thousands of times, and every tick it plays produces one labeled training example — `(game state, the action the oracle took)`. Laya is the *student* that gets fine-tuned to imitate those examples. Same idea as generating labeled difficulty examples via Codex earlier, just for a sequential control task instead of a one-shot classification.
+
+## Running it yourself
+
+```bash
+npm install
+npx playwright install chromium   # one-time browser download
+
+node play_oracle.js                                  # watch one run (headed, a window opens)
+node play_oracle.js --episodes 5 --headless \
+  --record data/oracle_sample.jsonl                  # play 5 runs, no window, log every tick
+```
+
+Each episode prints `ticks`, `score`, and `distance`. `--record <path>` appends one JSON line per tick (`{"state": {...}, "action": "..."}`) to that file — this is the raw material for fine-tuning.
+
+**Real run** (5 episodes, headless, `data/oracle_sample.jsonl`): scores of 287, 534, 158, 2299, 386 — avg **733**, highly variable (random obstacle generation plus ever-increasing speed means the simple reflex rules occasionally get caught out, e.g. two obstacles in adjacent lanes at once). 857 (state, action) pairs logged in this one sample run.
+
 ## Status
 
-**Bridge verified working end-to-end.** Served locally (`python3 -m http.server`, needed because Playwright blocks `file://`) and driven via Playwright:
-- `__getState()` correctly reports approaching obstacles and crash state (verified: doing nothing crashes into a lane-1 train right at the start, exactly as expected).
-- A simple hand-written reactive rule ("if an obstacle is in my lane within 15 units: dodge trains sideways, duck high barriers, jump low ones") using only `__getState`/`__action` survived 150 ticks (~12s simulated) without crashing, reaching a score of 848.
-
-That reactive rule is the "oracle" policy the next step needs — not the end goal, but the thing that generates labeled (state, correct-action) training data for Laya, the same imitation-learning approach Laya's own documented browser-agent fine-tune used.
+Bridge + oracle both verified working end-to-end, with a real committed, runnable script (`play_oracle.js`) rather than one-off commands — see "Running it yourself" above.
 
 ## Open questions / next steps
 
-- Scale the oracle into a proper data-collection script: play many runs, log every tick's state + oracle action as a training example
+- Scale data collection: run many more episodes (hundreds+) to build a real training set, not just the 857-tick sample above
 - Design the actual Laya prompt: a `choice` question over `{left, right, jump, duck, none}` given a text rendering of `obstaclesAhead`
 - Fine-tune on that data using the same Kaggle T4x2 pipeline built in `laya-model-router/finetune/`
-- Swap the oracle for the fine-tuned Laya checkpoint and watch it play live
+- Swap the oracle for the fine-tuned Laya checkpoint in `play_oracle.js` (or a new `play_laya.js`) and watch it play live
 - Decide how to judge "did it work" — survival time / score vs. the oracle and vs. zero-shot Laya, on held-out runs
