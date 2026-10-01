@@ -987,36 +987,56 @@
 
         let clock = new THREE.Clock();
 
+        function stepPhysics(delta) {
+            updatePlayerPhysics(delta);
+            updateChunks();
+            checkCollisions();
+            updateHUD();
+
+            // Rotate Collectibles
+            activeCoins.forEach(c => c.rotation.y += delta * 4);
+            activePowerupItems.forEach(p => p.mesh.rotation.y += delta * 3);
+
+            // Dynamic FOV stretch based on speed
+            camera.fov = THREE.MathUtils.lerp(camera.fov, 65 + (speed - 32) * 0.3, 5 * delta);
+            camera.updateProjectionMatrix();
+
+            // Dynamic Camera Smooth Follow
+            camera.position.x = THREE.MathUtils.lerp(camera.position.x, playerGroup.position.x * 0.55, 12 * delta);
+            camera.position.y = THREE.MathUtils.lerp(camera.position.y, playerGroup.position.y + 4.6, 12 * delta);
+            camera.position.z = playerGroup.position.z + 8.8;
+            camera.lookAt(playerGroup.position.x * 0.25, playerGroup.position.y + 1.8, playerGroup.position.z - 12);
+        }
+
         function animate() {
             requestAnimationFrame(animate);
 
             const delta = Math.min(clock.getDelta(), 0.1);
 
-            if (isPlaying) {
-                updatePlayerPhysics(delta);
-                updateChunks();
-                checkCollisions();
-                updateHUD();
-
-                // Rotate Collectibles
-                activeCoins.forEach(c => c.rotation.y += delta * 4);
-                activePowerupItems.forEach(p => p.mesh.rotation.y += delta * 3);
-
-                // Dynamic FOV stretch based on speed
-                camera.fov = THREE.MathUtils.lerp(camera.fov, 65 + (speed - 32) * 0.3, 5 * delta);
-                camera.updateProjectionMatrix();
-
-                // Dynamic Camera Smooth Follow
-                camera.position.x = THREE.MathUtils.lerp(camera.position.x, playerGroup.position.x * 0.55, 12 * delta);
-                camera.position.y = THREE.MathUtils.lerp(camera.position.y, playerGroup.position.y + 4.6, 12 * delta);
-                camera.position.z = playerGroup.position.z + 8.8;
-                camera.lookAt(playerGroup.position.x * 0.25, playerGroup.position.y + 1.8, playerGroup.position.z - 12);
+            if (isPlaying && !window.__manualPhysics) {
+                stepPhysics(delta);
             }
 
             if (!window.__fastMode) {
                 renderer.render(scene, camera);
             }
         }
+
+        // ---- Manual-step bridge (added for play_laya.py) ----
+        // Laya inference only runs in Python, so each decision needs a real
+        // Python<->browser round trip -- unlike the oracle (pure JS, could run
+        // the whole episode loop in one page.evaluate() call), that round trip
+        // can't be eliminated. Instead, physics only advances by a fixed `dt`
+        // when __tickOnce(dt) is explicitly called, decoupling decision latency
+        // from in-game reaction time. Game difficulty scales with
+        // distanceTraveled, not wall-clock time, so this doesn't change the
+        // difficulty curve -- just how much real time elapses between ticks.
+        window.__manualPhysics = false;
+        window.__tickOnce = function (dt) {
+            if (isPlaying) stepPhysics(dt);
+            if (!window.__fastMode) renderer.render(scene, camera);
+            return window.__getState();
+        };
 
         function resetGame() {
             activeChunks.forEach(c => scene.remove(c.group));

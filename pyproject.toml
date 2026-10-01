@@ -8,6 +8,7 @@ authors = [
 requires-python = ">=3.14"
 dependencies = [
     "laya>=0.3.22",
+    "playwright>=1.63.0",
 ]
 
 [build-system]

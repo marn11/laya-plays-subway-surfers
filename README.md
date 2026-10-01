@@ -78,8 +78,28 @@ The exact blind spot found during prompt validation reproduces exactly on this h
 
 Full pipeline verified working end-to-end: game bridge → oracle → data collection → balancing → episode-level split → prompt design → Kaggle fine-tuning → checkpoint evaluated against a real held-out test set, via committed runnable scripts, not one-off commands. Two real performance bugs were found and fixed while scaling data collection up (see the commit history on `play_oracle.js`/`game.html`): per-tick Node↔browser round trips were the real bottleneck (fixed by running the whole episode loop in-browser), and headless Chromium was still fully rendering every frame for no one to see (fixed with a `window.__fastMode` flag) — together, a 3.6x speedup.
 
+## Watching it actually play
+
+`play_laya.py` swaps the oracle for a real Laya agent (zero-shot or a fine-tuned checkpoint) making every decision live, instead of just measuring classifier accuracy on recorded states.
+
+**The architecture problem this had to solve:** Laya inference only runs in Python, unlike the oracle (pure JS, could run a whole episode loop inside one `page.evaluate()` call). Every decision now needs a real Python↔browser round trip, which reintroduces per-tick latency (~100-150ms on CPU). Naively, that would cost the agent real in-game reaction time — the game would keep moving while Python "thinks." Fixed by adding a manual-step mode to `game.html` (`window.__tickOnce(dt)`): physics only advances by a fixed `dt` when explicitly told to, so slow inference never costs reaction time. This is fair, not a workaround — the game's difficulty scales with `distanceTraveled`, not wall-clock time, so stepping in "slow motion" doesn't change the difficulty curve at all, just how much real time elapses between decisions.
+
+```bash
+uv run python play_laya.py --zero-shot --episodes 1                                    # watch one run, headed
+uv run python play_laya.py --checkpoint finetune/checkpoints/v1 --episodes 10 --headless
+```
+
+**Real result, 10 episodes each, actually playing the game (not just classifying recorded states):**
+
+| | Zero-shot | Fine-tuned (v1) |
+| --- | --- | --- |
+| Avg score | 438.8 | **1562.6** |
+| Avg distance survived | 439.2 | **1169.8** |
+
+~3.6x higher score, ~2.7x farther survived. This is the number that actually matters — the 99.8% classifier accuracy above doesn't by itself prove the fine-tuned model plays *better*, only that it matches the oracle's labels more often; this result confirms that translates into materially better real gameplay, not just higher held-out accuracy on recorded frames.
+
 ## Open questions / next steps
 
-- Swap the oracle for the fine-tuned Laya checkpoint in `play_oracle.js` (or a new `play_laya.js`) and watch it actually play the game live — the eval above is classifier-level accuracy, not yet "does it survive"
-- Decide how to judge "did it work" at that point — survival time / score vs. the oracle and vs. zero-shot Laya, on fresh (non-recorded) runs
-- Make the oracle coin-seeking, not just obstacle-avoiding: `__getState()` currently only reports `obstaclesAhead` — the game's own `activeCoins` array isn't exposed at all yet. Would need (a) a `coinsAhead` field added to `__getState()` the same way `obstaclesAhead` works, and (b) oracle.js logic to prefer an adjacent lane with coins when it's not already forced to dodge something. Not done yet — just scoped.
+- Make the oracle (and Laya) coin-seeking, not just obstacle-avoiding: `__getState()` currently only reports `obstaclesAhead` — the game's own `activeCoins` array isn't exposed at all yet. Would need (a) a `coinsAhead` field added to `__getState()` the same way `obstaclesAhead` works, and (b) oracle.js logic to prefer an adjacent lane with coins when it's not already forced to dodge something. Not done yet — just scoped.
+- Tune `TICK_DT` in `play_laya.py` (currently 0.1s) — untested whether a smaller step size changes results meaningfully
+- Try a bigger training set (the whole project used ~4k fine-tuning examples from 18 episodes) now that the pipeline is proven end to end
