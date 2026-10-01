@@ -26,23 +26,33 @@ Added at the bottom of that same `<script>` block, so it has direct access to th
 npm install
 npx playwright install chromium   # one-time browser download
 
-node play_oracle.js                                  # watch one run (headed, a window opens)
-node play_oracle.js --episodes 5 --headless \
-  --record data/oracle_sample.jsonl                  # play 5 runs, no window, log every tick
+node play_oracle.js                                        # watch one run (headed, a window opens)
+node play_oracle.js --headless --max-ticks 50000 \
+  --record data/oracle_dataset.jsonl                       # real data-collection run, no window
 ```
 
-Each episode prints `ticks`, `score`, and `distance`. `--record <path>` appends one JSON line per tick (`{"state": {...}, "action": "..."}`) to that file — this is the raw material for fine-tuning.
+Each episode prints `ticks`, `score`, and `distance`. `--record <path>` appends one JSON line per tick (`{"state": {...}, "action": "..."}`) to that file — this is the raw material for fine-tuning. `--max-ticks` is a total-tick budget (finishes the in-progress episode, doesn't cut it mid-run) — episode length is too variable (seen as low as ~450 and as high as ~5900 ticks) for `--episodes` alone to give a predictable run time.
 
-**Real run** (5 episodes, headless, `data/oracle_sample.jsonl`): scores of 287, 534, 158, 2299, 386 — avg **733**, highly variable (random obstacle generation plus ever-increasing speed means the simple reflex rules occasionally get caught out, e.g. two obstacles in adjacent lanes at once). 857 (state, action) pairs logged in this one sample run.
+**Real dataset** (`data/oracle_dataset.jsonl`, committed): 23 episodes, **51,073 ticks**, avg score 1025. One important finding before this gets used for training: the action distribution is heavily imbalanced —
+
+| action | count | % |
+| --- | --- | --- |
+| none | 48,426 | 94.8% |
+| jump | 1,211 | 2.4% |
+| duck | 927 | 1.8% |
+| left | 261 | 0.5% |
+| right | 248 | 0.5% |
+
+Makes sense (most ticks have no obstacle within reaction distance), but training directly on this as-is would teach Laya to mostly just say "none" and get ~95% tick-level accuracy while being useless at the only ticks that matter. Needs addressing before fine-tuning — likely downsampling "none" or weighting the loss — not done yet, flagged here so it's not forgotten.
 
 ## Status
 
-Bridge + oracle both verified working end-to-end, with a real committed, runnable script (`play_oracle.js`) rather than one-off commands — see "Running it yourself" above.
+Bridge, oracle, and a real 51k-tick dataset all verified working end-to-end, via committed runnable scripts (`play_oracle.js`, `oracle.js`) rather than one-off commands — see "Running it yourself" above. Two real performance bugs were found and fixed while scaling this up (see the commit history on `play_oracle.js`/`game.html`): per-tick Node↔browser round trips were the real bottleneck (fixed by running the whole episode loop in-browser), and headless Chromium was still fully rendering every frame for no one to see (fixed with a `window.__fastMode` flag) — together, a 3.6x speedup.
 
 ## Open questions / next steps
 
+- Fix the action-class imbalance above before training on this data (downsample "none", or weight the fine-tuning loss)
 - Make the oracle coin-seeking, not just obstacle-avoiding: `__getState()` currently only reports `obstaclesAhead` — the game's own `activeCoins` array isn't exposed at all yet. Would need (a) a `coinsAhead` field added to `__getState()` the same way `obstaclesAhead` works, and (b) oracle.js logic to prefer an adjacent lane with coins when it's not already forced to dodge something. Not done yet — just scoped.
-- Scale data collection: run many more episodes (hundreds+) to build a real training set, not just the 857-tick sample above
 - Design the actual Laya prompt: a `choice` question over `{left, right, jump, duck, none}` given a text rendering of `obstaclesAhead`
 - Fine-tune on that data using the same Kaggle T4x2 pipeline built in `laya-model-router/finetune/`
 - Swap the oracle for the fine-tuned Laya checkpoint in `play_oracle.js` (or a new `play_laya.js`) and watch it play live
