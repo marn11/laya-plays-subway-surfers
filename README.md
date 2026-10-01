@@ -41,6 +41,7 @@ Bridge + oracle both verified working end-to-end, with a real committed, runnabl
 
 ## Open questions / next steps
 
+- Make the oracle coin-seeking, not just obstacle-avoiding: `__getState()` currently only reports `obstaclesAhead` — the game's own `activeCoins` array isn't exposed at all yet. Would need (a) a `coinsAhead` field added to `__getState()` the same way `obstaclesAhead` works, and (b) oracle.js logic to prefer an adjacent lane with coins when it's not already forced to dodge something. Not done yet — just scoped.
 - Scale data collection: run many more episodes (hundreds+) to build a real training set, not just the 857-tick sample above
 - Design the actual Laya prompt: a `choice` question over `{left, right, jump, duck, none}` given a text rendering of `obstaclesAhead`
 - Fine-tune on that data using the same Kaggle T4x2 pipeline built in `laya-model-router/finetune/`
