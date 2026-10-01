@@ -56,13 +56,30 @@ Makes sense (most ticks have no obstacle within reaction distance), but training
 
 **Tested zero-shot against 30 real recorded states before trusting it** (`test_zero_shot.py`, same "validate the wording before building on it" approach as `laya-model-router`): **23/30 (76.7%) matched the oracle's action, with no fine-tuning at all.** One specific, real weakness found: Laya **never predicted "left" or "right" even once** across all 30 samples — including the actual left/right ground-truth cases (both read as "none") and some "train blocking the lane" cases where a lane change was exactly correct. Tried a more explicit criteria wording (`"dodge left, into the lane on the left"` vs. plain `"move left"`) — **identical result, same confusion matrix.** That rules out a surface wording problem; this is a genuine zero-shot blind spot, not a prompt-tuning one. Good news: the balanced dataset has 261 left + 248 right labeled examples specifically for fine-tuning to fix this.
 
+## v1: fine-tuning (done)
+
+Followed the exact same recipe as `laya-model-router/finetune/` (RLCD/GRPO via the official `train_ddp.py`, unmodified, run on Kaggle T4×2 via the `kaggle` CLI):
+
+1. **Episode-level train/test split** (`finetune/split_dataset.py`), not a random tick-level split — consecutive ticks within one episode look nearly identical, so a random split would leak near-duplicate frames between train and test and inflate apparent accuracy. 23 episodes → 18 train / 5 test, each split then balanced independently with `balance_dataset.js`: **4,040 train rows, 1,254 test rows** (held-out episodes, never touched during training).
+2. **Tokenization** (`finetune/build_train_items.py`) — same CPU-only approach as before, adapted for a `choice` question (5 options) instead of a `score` question (3 levels). 4,040/4,040 items built cleanly.
+3. **Training on Kaggle** (`finetune/kaggle_kernel/`) — completed fully in ~23 minutes (4 epochs), checkpoint saved, calibration temperatures fitted. The notebook's own eval cell then failed — I'd hardcoded the dataset input path instead of discovering it with `glob`, the exact mistake already fixed once in `laya-model-router`'s pipeline and not propagated here. Training itself wasn't affected, so no need to rerun Kaggle: the checkpoint downloaded successfully, evaluated locally instead (`finetune/eval_checkpoint.py`, CPU).
+4. **Real before/after, same 1,254 held-out test cases for both:**
+
+| | Zero-shot | Fine-tuned |
+| --- | --- | --- |
+| Accuracy | 76.3% | **99.8%** |
+| left | 0/39 correct | 39/39 |
+| right | 0/35 correct | 35/35 |
+| Mean latency | 42.3ms (CPU) | 143.9ms (CPU) |
+
+The exact blind spot found during prompt validation reproduces exactly on this held-out set (left/right almost universally read as "none") and fine-tuning **eliminates it completely** — only 3 misclassifications total out of 1,254, all "none" read as an unnecessary (harmless) dodge. +23.5 points overall from fine-tuning on 4,040 examples.
+
 ## Status
 
-Bridge, oracle, a real 51k-tick dataset, a balanced training-ready version, and a validated zero-shot prompt all verified working end-to-end, via committed runnable scripts (`play_oracle.js`, `oracle.js`, `balance_dataset.js`, `test_zero_shot.py`) rather than one-off commands — see "Running it yourself" and "The Laya prompt" above. Two real performance bugs were found and fixed while scaling data collection up (see the commit history on `play_oracle.js`/`game.html`): per-tick Node↔browser round trips were the real bottleneck (fixed by running the whole episode loop in-browser), and headless Chromium was still fully rendering every frame for no one to see (fixed with a `window.__fastMode` flag) — together, a 3.6x speedup.
+Full pipeline verified working end-to-end: game bridge → oracle → data collection → balancing → episode-level split → prompt design → Kaggle fine-tuning → checkpoint evaluated against a real held-out test set, via committed runnable scripts, not one-off commands. Two real performance bugs were found and fixed while scaling data collection up (see the commit history on `play_oracle.js`/`game.html`): per-tick Node↔browser round trips were the real bottleneck (fixed by running the whole episode loop in-browser), and headless Chromium was still fully rendering every frame for no one to see (fixed with a `window.__fastMode` flag) — together, a 3.6x speedup.
 
 ## Open questions / next steps
 
-- Fine-tune on `data/oracle_dataset_balanced.jsonl` using the same Kaggle T4x2 pipeline built in `laya-model-router/finetune/` — expect the left/right blind spot found above to be the clearest before/after signal
+- Swap the oracle for the fine-tuned Laya checkpoint in `play_oracle.js` (or a new `play_laya.js`) and watch it actually play the game live — the eval above is classifier-level accuracy, not yet "does it survive"
+- Decide how to judge "did it work" at that point — survival time / score vs. the oracle and vs. zero-shot Laya, on fresh (non-recorded) runs
 - Make the oracle coin-seeking, not just obstacle-avoiding: `__getState()` currently only reports `obstaclesAhead` — the game's own `activeCoins` array isn't exposed at all yet. Would need (a) a `coinsAhead` field added to `__getState()` the same way `obstaclesAhead` works, and (b) oracle.js logic to prefer an adjacent lane with coins when it's not already forced to dodge something. Not done yet — just scoped.
-- Swap the oracle for the fine-tuned Laya checkpoint in `play_oracle.js` (or a new `play_laya.js`) and watch it play live
-- Decide how to judge "did it work" — survival time / score vs. the oracle and vs. zero-shot Laya, on held-out runs
