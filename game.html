@@ -1013,7 +1013,9 @@
                 camera.lookAt(playerGroup.position.x * 0.25, playerGroup.position.y + 1.8, playerGroup.position.z - 12);
             }
 
-            renderer.render(scene, camera);
+            if (!window.__fastMode) {
+                renderer.render(scene, camera);
+            }
         }
 
         function resetGame() {
