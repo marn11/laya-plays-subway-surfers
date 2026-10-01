@@ -47,14 +47,22 @@ Makes sense (most ticks have no obstacle within reaction distance), but training
 
 **Fixed via `balance_dataset.js`** (`node balance_dataset.js data/oracle_dataset.jsonl data/oracle_dataset_balanced.jsonl`): randomly downsamples "none" rows down to the same total as all non-"none" rows combined, leaving jump/duck/left/right untouched (no duplication of the smallest classes, to avoid overfitting on a handful of repeated frames). Result, `data/oracle_dataset_balanced.jsonl` (committed): **5,294 rows** — 2,647 "none" (50%), 1,211 jump, 927 duck, 261 left, 248 right. This specific 50/50 ratio is one defensible choice, not the only correct one — revisit if the fine-tuned result still leans "none"-biased.
 
+## The Laya prompt
+
+`src/laya_plays_subway_surfers/policy.py` is the Python side (Python, not JS, since that's where the `laya` package lives — set up the same way as `laya-model-router`: `uv init --lib` + `uv add laya`):
+
+- `render_state(state)` — turns a `__getState()` snapshot into the text Laya sees, e.g. `"You are running in lane 1 ... Obstacles ahead, nearest first: - lane 1, 12 units away: a high barrier (duck under it)"`. Obstacle descriptions spell out duck-vs-jump in plain language rather than exposing the raw `isHigh` boolean.
+- `QUESTIONS` — a `choice` question over `{left, right, jump, duck, none}`.
+
+**Tested zero-shot against 30 real recorded states before trusting it** (`test_zero_shot.py`, same "validate the wording before building on it" approach as `laya-model-router`): **23/30 (76.7%) matched the oracle's action, with no fine-tuning at all.** One specific, real weakness found: Laya **never predicted "left" or "right" even once** across all 30 samples — including the actual left/right ground-truth cases (both read as "none") and some "train blocking the lane" cases where a lane change was exactly correct. Tried a more explicit criteria wording (`"dodge left, into the lane on the left"` vs. plain `"move left"`) — **identical result, same confusion matrix.** That rules out a surface wording problem; this is a genuine zero-shot blind spot, not a prompt-tuning one. Good news: the balanced dataset has 261 left + 248 right labeled examples specifically for fine-tuning to fix this.
+
 ## Status
 
-Bridge, oracle, a real 51k-tick dataset, and a balanced training-ready version all verified working end-to-end, via committed runnable scripts (`play_oracle.js`, `oracle.js`, `balance_dataset.js`) rather than one-off commands — see "Running it yourself" above. Two real performance bugs were found and fixed while scaling data collection up (see the commit history on `play_oracle.js`/`game.html`): per-tick Node↔browser round trips were the real bottleneck (fixed by running the whole episode loop in-browser), and headless Chromium was still fully rendering every frame for no one to see (fixed with a `window.__fastMode` flag) — together, a 3.6x speedup.
+Bridge, oracle, a real 51k-tick dataset, a balanced training-ready version, and a validated zero-shot prompt all verified working end-to-end, via committed runnable scripts (`play_oracle.js`, `oracle.js`, `balance_dataset.js`, `test_zero_shot.py`) rather than one-off commands — see "Running it yourself" and "The Laya prompt" above. Two real performance bugs were found and fixed while scaling data collection up (see the commit history on `play_oracle.js`/`game.html`): per-tick Node↔browser round trips were the real bottleneck (fixed by running the whole episode loop in-browser), and headless Chromium was still fully rendering every frame for no one to see (fixed with a `window.__fastMode` flag) — together, a 3.6x speedup.
 
 ## Open questions / next steps
 
-- Design the actual Laya prompt (next up): a `choice` question over `{left, right, jump, duck, none}` given a text rendering of `obstaclesAhead`
+- Fine-tune on `data/oracle_dataset_balanced.jsonl` using the same Kaggle T4x2 pipeline built in `laya-model-router/finetune/` — expect the left/right blind spot found above to be the clearest before/after signal
 - Make the oracle coin-seeking, not just obstacle-avoiding: `__getState()` currently only reports `obstaclesAhead` — the game's own `activeCoins` array isn't exposed at all yet. Would need (a) a `coinsAhead` field added to `__getState()` the same way `obstaclesAhead` works, and (b) oracle.js logic to prefer an adjacent lane with coins when it's not already forced to dodge something. Not done yet — just scoped.
-- Fine-tune on that data using the same Kaggle T4x2 pipeline built in `laya-model-router/finetune/`
 - Swap the oracle for the fine-tuned Laya checkpoint in `play_oracle.js` (or a new `play_laya.js`) and watch it play live
 - Decide how to judge "did it work" — survival time / score vs. the oracle and vs. zero-shot Laya, on held-out runs
