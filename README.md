@@ -1,6 +1,6 @@
-# laya-plays-subway-surfers
+# ai-plays-endless-runner
 
-Fine-tuning [Laya](https://huggingface.co/convaiinnovations/laya) — the same decision model used in [laya-model-router](https://github.com/marn11/laya-model-router) — to play a Subway-Surfers-style endless runner, by picking one of a handful of actions (left/right/jump/duck/none) from a text description of the game state each tick.
+Fine-tuning [Laya](https://huggingface.co/convaiinnovations/laya) — the same decision model used in [laya-model-router](https://github.com/marn11/llm-task-router) — to play a Subway-Surfers-style endless runner, by picking one of a handful of actions (left/right/jump/duck/none) from a text description of the game state each tick.
 
 ## Why a clone, not the real mobile game
 
@@ -49,20 +49,20 @@ Makes sense (most ticks have no obstacle within reaction distance), but training
 
 ## The Laya prompt
 
-`src/laya_plays_subway_surfers/policy.py` is the Python side (Python, not JS, since that's where the `laya` package lives — set up the same way as `laya-model-router`: `uv init --lib` + `uv add laya`):
+`src/laya_plays_subway_surfers/policy.py` (repo: `ai-plays-endless-runner`) is the Python side (Python, not JS, since that's where the `laya` package lives — set up the same way as `llm-task-router`: `uv init --lib` + `uv add laya`):
 
 - `render_state(state)` — turns a `__getState()` snapshot into the text Laya sees, e.g. `"You are running in lane 1 ... Obstacles ahead, nearest first: - lane 1, 12 units away: a high barrier (duck under it)"`. Obstacle descriptions spell out duck-vs-jump in plain language rather than exposing the raw `isHigh` boolean.
 - `QUESTIONS` — a `choice` question over `{left, right, jump, duck, none}`.
 
-**Tested zero-shot against 30 real recorded states before trusting it** (`test_zero_shot.py`, same "validate the wording before building on it" approach as `laya-model-router`): **23/30 (76.7%) matched the oracle's action, with no fine-tuning at all.** One specific, real weakness found: Laya **never predicted "left" or "right" even once** across all 30 samples — including the actual left/right ground-truth cases (both read as "none") and some "train blocking the lane" cases where a lane change was exactly correct. Tried a more explicit criteria wording (`"dodge left, into the lane on the left"` vs. plain `"move left"`) — **identical result, same confusion matrix.** That rules out a surface wording problem; this is a genuine zero-shot blind spot, not a prompt-tuning one. Good news: the balanced dataset has 261 left + 248 right labeled examples specifically for fine-tuning to fix this.
+**Tested zero-shot against 30 real recorded states before trusting it** (`test_zero_shot.py`, same "validate the wording before building on it" approach as `llm-task-router`): **23/30 (76.7%) matched the oracle's action, with no fine-tuning at all.** One specific, real weakness found: Laya **never predicted "left" or "right" even once** across all 30 samples — including the actual left/right ground-truth cases (both read as "none") and some "train blocking the lane" cases where a lane change was exactly correct. Tried a more explicit criteria wording (`"dodge left, into the lane on the left"` vs. plain `"move left"`) — **identical result, same confusion matrix.** That rules out a surface wording problem; this is a genuine zero-shot blind spot, not a prompt-tuning one. Good news: the balanced dataset has 261 left + 248 right labeled examples specifically for fine-tuning to fix this.
 
 ## v1: fine-tuning (done)
 
-Followed the exact same recipe as `laya-model-router/finetune/` (RLCD/GRPO via the official `train_ddp.py`, unmodified, run on Kaggle T4×2 via the `kaggle` CLI):
+Followed the exact same recipe as `llm-task-router/finetune/` (RLCD/GRPO via the official `train_ddp.py`, unmodified, run on Kaggle T4×2 via the `kaggle` CLI):
 
 1. **Episode-level train/test split** (`finetune/split_dataset.py`), not a random tick-level split — consecutive ticks within one episode look nearly identical, so a random split would leak near-duplicate frames between train and test and inflate apparent accuracy. 23 episodes → 18 train / 5 test, each split then balanced independently with `balance_dataset.js`: **4,040 train rows, 1,254 test rows** (held-out episodes, never touched during training).
 2. **Tokenization** (`finetune/build_train_items.py`) — same CPU-only approach as before, adapted for a `choice` question (5 options) instead of a `score` question (3 levels). 4,040/4,040 items built cleanly.
-3. **Training on Kaggle** (`finetune/kaggle_kernel/`) — completed fully in ~23 minutes (4 epochs), checkpoint saved, calibration temperatures fitted. The notebook's own eval cell then failed — I'd hardcoded the dataset input path instead of discovering it with `glob`, the exact mistake already fixed once in `laya-model-router`'s pipeline and not propagated here. Training itself wasn't affected, so no need to rerun Kaggle: the checkpoint downloaded successfully, evaluated locally instead (`finetune/eval_checkpoint.py`, CPU).
+3. **Training on Kaggle** (`finetune/kaggle_kernel/`) — completed fully in ~23 minutes (4 epochs), checkpoint saved, calibration temperatures fitted. The notebook's own eval cell then failed — I'd hardcoded the dataset input path instead of discovering it with `glob`, the exact mistake already fixed once in `llm-task-router`'s pipeline and not propagated here. Training itself wasn't affected, so no need to rerun Kaggle: the checkpoint downloaded successfully, evaluated locally instead (`finetune/eval_checkpoint.py`, CPU).
 4. **Real before/after, same 1,254 held-out test cases for both:**
 
 | | Zero-shot | Fine-tuned |
